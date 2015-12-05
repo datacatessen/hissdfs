@@ -20,7 +20,7 @@ def _random_id():
 
 
 def _random_dataserver():
-    return dataservers[random.randint(0, len(dataservers) - 1)]
+    return random.choice(dataservers)
 
 
 def _create(file_name):
@@ -42,6 +42,14 @@ def _create(file_name):
         return block_info
     else:
         raise OSError.FileExistsError("File %s already exists" % file_name)
+
+
+def _fetch_metadata(file_name):
+    if _exists(file_name):
+        logging.debug("fetch_metdata %s" % file_name)
+        return namespace[file_name]
+    else:
+        raise Exception("File %s does not exist" % file_name)
 
 
 def _exists(file_name):
@@ -110,6 +118,9 @@ class NameServer(rpyc.Service):
 
     def exposed_create(self, file_name):
         return _create(file_name)
+
+    def exposed_fetch_metadata(self, file_name):
+        return _fetch_metadata(file_name)
 
     def exposed_touch(self, file_name):
         return _touch(file_name)

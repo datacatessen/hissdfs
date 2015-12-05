@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
-import logging
-import rpyc
+import random
 import sys
+
 from Utils import _connect
 
 if __name__ == "__main__":
@@ -18,6 +18,21 @@ if __name__ == "__main__":
     if cmd == "exists":
         if not conn.root.exists(sys.argv[3]):
             exit_code = 1
+    elif cmd == "cat":
+        if len(sys.argv) == 4:
+            file = sys.argv[3]
+
+            if conn.root.exists(file):
+                block_info = conn.root.fetch_metadata(file)
+                for blk_id in block_info:
+                    host = random.choice(block_info[blk_id])
+                    data_conn = _connect(host)
+                    print data_conn.root.read(blk_id)
+            else:
+                print "file %s does not exist" % file
+                exit_code = 1
+        else:
+            print "usage: cat <file>"
     elif cmd == "ls":
         for f in conn.root.ls():
             print f
