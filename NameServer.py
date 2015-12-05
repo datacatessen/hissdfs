@@ -2,21 +2,18 @@
 
 # System imports
 import logging
+
 import rpyc
-import sys
-
-# Local imports
-
-root = logging.getLogger()
-root.setLevel(logging.DEBUG)
-ch = logging.StreamHandler(sys.stdout)
-ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-root.addHandler(ch)
 
 '''
 The namespace maintains a mapping of filename to a list of (block, hostnames) pairs file-> [ (block, [ hostnames ] ) ]
 '''
 namespace = dict()
+
+'''
+This is a set of dataservers currently connected to the NameServer
+'''
+dataservers = set()
 
 
 def _exists(file_name):
@@ -51,6 +48,29 @@ def _ls():
     return files
 
 
+def _register(host, port):
+    servername = "%s:%d" % (host, port)
+    if servername in dataservers:
+        logging.error("Server has already been registered with the service")
+        return False
+    else:
+        dataservers.add(servername)
+        logging.info("Registered dataserver at %s:%s" % (host, port))
+        logging.info("List of dataservers is %s" % dataservers)
+        return True
+
+
+def _unregister(host, port):
+    servername = "%s:%d" % (host, port)
+    if not servername in dataservers:
+        logging.warning("Call to unregister %s:%s, but no server exists" % (host, port))
+        return False
+    else:
+        logging.info("Unregistered dataserver at %s:%s" % (host, port))
+        dataservers.remove(servername)
+        return True
+
+
 class NameServer(rpyc.Service):
     __hostname = "localhost"
     __port = 40404
@@ -69,6 +89,12 @@ class NameServer(rpyc.Service):
 
     def exposed_ls(self):
         return _ls()
+
+    def exposed_register(self, host, port):
+        return _register(host, port)
+
+    def exposed_unregister(self, host, port):
+        return _unregister(host, port)
 
     def on_connect(self):
         pass

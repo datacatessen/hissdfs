@@ -1,4 +1,5 @@
 {
 	"nameserver.host" : "localhost",
-	"nameserver.port" : 40404
+	"nameserver.port" : 40404,
+	"dataserver.data.dir" : "/tmp/dcd"
 }
