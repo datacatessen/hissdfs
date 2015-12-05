@@ -3,22 +3,7 @@
 import logging
 import rpyc
 import sys
-
-
-def _connect(hostname, port=None):
-    '''Connects to a rpyc slave. It can either take the form of _connect('1.2.3.4:1234') or _connect('1.2.3.4', 1234)'''
-
-    if port is None:
-        hostname, port = hostname.split(':')
-
-    try:
-        a = rpyc.connect(str(hostname), int(port))
-        return a
-    except Exception as e:
-        logging.warning(' '.join(['There was a problem connecting to', hostname, str(port)]))
-
-        raise e
-
+from Utils import _connect
 
 if __name__ == "__main__":
     if len(sys.argv) <= 1:
