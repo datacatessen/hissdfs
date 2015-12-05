@@ -1,18 +1,11 @@
 #!/usr/bin/python
 
 # System imports
-import errno
-import os
 import logging
-import os.path as path
-import socket, sys, rpyc
-import time
-from socket import gethostname
-from rpyc.utils.server import ForkingServer
-from rpyc.utils.server import ThreadedServer
+import rpyc
+import sys
+
 # Local imports
-import FileHandle
-from Utils import _mkdirp
 
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
@@ -20,7 +13,11 @@ ch = logging.StreamHandler(sys.stdout)
 ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 root.addHandler(ch)
 
+'''
+The namespace maintains a mapping of filename to a list of (block, hostnames) pairs file-> [ (block, [ hostnames ] ) ]
+'''
 namespace = dict()
+
 
 def _exists(file_name):
     logging.debug("exists %s" % file_name)
@@ -30,10 +27,19 @@ def _exists(file_name):
 def _touch(file_name):
     if not _exists(file_name):
         logging.debug("touch %s" % file_name)
-        namespace[file_name] = dict()
+        namespace[file_name] = list()
         return True
     else:
         raise OSError.FileExistsError("File %s already exists" % file_name)
+
+
+def _rm(file_name):
+    if _exists(file_name):
+        logging.debug("rm %s" % file_name)
+        del namespace[file_name]
+        return True
+    else:
+        return False
 
 
 def _ls():
@@ -45,30 +51,18 @@ def _ls():
     return files
 
 
-def start_service(port, data_dir):
-    data_dir = path.abspath(data_dir)
-    _mkdirp(data_dir)
-
-    SlaveServer._hostname = gethostname()
-    SlaveServer._port = int(port)
-    SlaveServer._data_dir = data_dir
-
-    _mkdirp(path.join(data_dir, 'storage'))
-
-    s = ThreadedServer(SlaveServer, port=int(port))
-    s.start()
-
-
-class SlaveServer(rpyc.Service):
+class NameServer(rpyc.Service):
     __hostname = "localhost"
     __port = 40404
-    __data_dir = "/tmp"
 
     def exposed_ping(self):
         return 'pong'
 
     def exposed_touch(self, file_name):
         return _touch(file_name)
+
+    def exposed_rm(self, file_name):
+        return _rm(file_name)
 
     def exposed_exists(self, file_name):
         return _exists(file_name)
@@ -81,12 +75,3 @@ class SlaveServer(rpyc.Service):
 
     def on_disconnect(self):
         pass
-
-
-if __name__ == "__main__":
-    if len(sys.argv) <= 1:
-        print "usage: python nameserver.py <port> <data_dir>"
-    else:
-        port = int(sys.argv[1])
-        data_dir = sys.argv[2]
-        start_service(port=port, data_dir=data_dir)

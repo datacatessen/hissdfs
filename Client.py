@@ -31,18 +31,24 @@ if __name__ == "__main__":
 
         conn = _connect(host)
 
-        if "exists" in cmd:
+        if cmd == "exists":
             if conn.root.exists(sys.argv[3]):
                 sys.exit(0)
             else:
                 sys.exit(1)
-        elif "touch" in cmd:
+        elif cmd == "touch":
             if conn.root.touch(sys.argv[3]):
                 sys.exit(0)
             else:
                 sys.exit(1)
-        elif "ls" in cmd:
+        elif cmd == "rm":
+            if conn.root.rm(sys.argv[3]):
+                sys.exit(0)
+            else:
+                print "file '%s' does not exist" % sys.argv[3]
+                sys.exit(1)
+        elif cmd == "ls":
             for f in conn.root.ls():
                 print f
         else:
-             print "unknown command %s" % cmd
+            print "unknown command %s" % cmd
