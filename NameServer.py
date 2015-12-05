@@ -1,19 +1,47 @@
 #!/usr/bin/python
 
 # System imports
-import logging
-
-import rpyc
+import logging, random, rpyc, sys
+from Utils import _connect
 
 '''
-The namespace maintains a mapping of filename to a list of (block, hostnames) pairs file-> [ (block, [ hostnames ] ) ]
+The namespace maintains a multi-map of filename -> block id -> { hostnames }
 '''
 namespace = dict()
 
 '''
 This is a set of dataservers currently connected to the NameServer
 '''
-dataservers = set()
+dataservers = list()
+
+
+def _random_id():
+    return '_'.join(["blk", str(random.randint(0, sys.maxint))])
+
+
+def _random_dataserver():
+    return dataservers[random.randint(0, len(dataservers) - 1)]
+
+
+def _create(file_name):
+    if not _exists(file_name):
+        if len(dataservers) == 0:
+            raise Exception("Num dataservers is zero, cannot create file")
+
+        namespace[file_name] = dict()
+
+        block_info = dict()
+        block_info['id'] = _random_id()
+        block_info['host'] = _random_dataserver()
+        block_info['file'] = file_name
+
+        ''' Update namespace block mapping to have this new block'''
+        namespace[file_name] = {block_info['id']: [block_info['host']]}
+
+        logging.debug("returning block info %s" % block_info)
+        return block_info
+    else:
+        raise OSError.FileExistsError("File %s already exists" % file_name)
 
 
 def _exists(file_name):
@@ -33,6 +61,11 @@ def _touch(file_name):
 def _rm(file_name):
     if _exists(file_name):
         logging.debug("rm %s" % file_name)
+        file_blocks = namespace[file_name]
+        for blk_id in file_blocks:
+            for host in file_blocks[blk_id]:
+                ds_conn = _connect(host)
+                ds_conn.root.rm_blk(blk_id)
         del namespace[file_name]
         return True
     else:
@@ -54,7 +87,7 @@ def _register(host, port):
         logging.error("Server has already been registered with the service")
         return False
     else:
-        dataservers.add(servername)
+        dataservers.append(servername)
         logging.info("Registered dataserver at %s:%s" % (host, port))
         logging.info("List of dataservers is %s" % dataservers)
         return True
@@ -72,11 +105,11 @@ def _unregister(host, port):
 
 
 class NameServer(rpyc.Service):
-    __hostname = "localhost"
-    __port = 40404
-
     def exposed_ping(self):
         return 'pong'
+
+    def exposed_create(self, file_name):
+        return _create(file_name)
 
     def exposed_touch(self, file_name):
         return _touch(file_name)
