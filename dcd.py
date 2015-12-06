@@ -8,12 +8,12 @@ from socket import error as socket_error
 from rpyc.utils.server import ThreadedServer
 from rpyc.core.protocol import DEFAULT_CONFIG
 # Local imports
-from Utils import _connect
-from Utils import _mkdirp
+from Utils import _connect, _mkdirp
 from DataServer import DataServer
-from NameServer import NameServer
+from NameServer import NameServer, _check_heartbeats
 
 required_params = ['nameserver.host', 'nameserver.port', 'dataserver.data.dir']
+
 
 def _init_logging(config):
     root = logging.getLogger()
@@ -59,7 +59,9 @@ def start_name_service(config):
     t.daemon = True
     t.start()
     try:
-        while t.isAlive(): t.join(1)
+        while t.isAlive():
+            _check_heartbeats()
+            t.join(1)
     except KeyboardInterrupt:
         pass
 

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # System imports
-import logging, random, rpyc, sys
+import logging, random, rpyc, sys, time
 from Utils import _connect
 
 '''
@@ -12,7 +12,14 @@ namespace = dict()
 '''
 This is a set of dataservers currently connected to the NameServer
 '''
-dataservers = list()
+dataserver_meta = {}
+
+
+def _check_heartbeats():
+    for (servername, heartbeat) in dataserver_meta.items():
+        if heartbeat + 10 < time.time():
+            logging.warning("Server %s has not check in for 10 seconds, unregistering" % servername)
+            _unregister(servername.split(':')[0], int(servername.split(':')[1]))
 
 
 def _random_id():
@@ -20,12 +27,12 @@ def _random_id():
 
 
 def _random_dataserver():
-    return random.choice(dataservers)
+    return random.choice(dataserver_meta.keys())
 
 
 def _create(file_name):
     if not _exists(file_name):
-        if len(dataservers) == 0:
+        if len(dataserver_meta) == 0:
             raise Exception("Num dataservers is zero, cannot create file")
 
         namespace[file_name] = dict()
@@ -91,21 +98,21 @@ def _ls():
 
 def _register(host, port):
     servername = "%s:%d" % (host, port)
-    if not servername in dataservers:
-        dataservers.append(servername)
+    if not servername in dataserver_meta:
+        dataserver_meta[servername] = time.time()
         logging.info("Registered dataserver at %s:%s" % (host, port))
-        logging.info("List of dataservers is %s" % dataservers)
+        logging.info("List of dataservers is %s" % dataserver_meta.keys())
     else:
         logging.warning("Server has already been registered with the service")
 
 
 def _unregister(host, port):
     servername = "%s:%d" % (host, port)
-    if not servername in dataservers:
+    if not servername in dataserver_meta:
         logging.warning("Call to unregister %s:%s, but no server exists" % (host, port))
     else:
         logging.info("Unregistered dataserver at %s:%s" % (host, port))
-        dataservers.remove(servername)
+        del dataserver_meta[servername]
 
 
 class NameServer(rpyc.Service):
@@ -115,6 +122,7 @@ class NameServer(rpyc.Service):
     def exposed_heartbeat(self, host, port):
         servername = "%s:%d" % (host, port)
         logging.debug("Received heartbeat from %s" % servername)
+        dataserver_meta[servername] = time.time()
         pass
 
     def exposed_create(self, file_name):
