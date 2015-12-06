@@ -1,9 +1,9 @@
 # System imports
-import json, logging, random, rpyc, sys, threading, time, uuid
+import json, logging, random, rpyc, sys, threading, uuid
 from collections import OrderedDict
 from socket import gethostname
 # Local imports
-from Utils import connect, split_hostport, start_rpyc_server
+from Utils import connect, now, split_hostport, start_rpyc_server
 
 '''
 The namespace maintains a multi-map of filename -> { block id : set(server_ids) },
@@ -47,7 +47,7 @@ def start_name_service(config):
 def _check_heartbeats():
     for (id, metadata) in dataserver_metadata.items():
         assert isinstance(metadata, dict)
-        if metadata["status"] != "DEAD" and metadata["heartbeat"] + 10 < time.time():
+        if metadata["status"] != "DEAD" and metadata["heartbeat"] + 10 < now():
             logging.warning("Server %s has not check in for 10 seconds, unregistering" % id)
             _unregister(id, metadata["address"])
 
@@ -106,16 +106,16 @@ def _random_dataserver(exclude=list()):
 
 def _register(id, address):
     if id not in dataserver_metadata:
-        logging.error("Server %s, addr %s attempted to register w/o an already existing ID" % (id, address))
-        raise Exception("You need to make an ID for yourself first!")
-
-    if dataserver_metadata[id]["status"] == "DEAD":
-        logging.info("Server %s, addr %s is now registered as alive" % (id, address))
-        dataserver_metadata[id]["status"] = "ALIVE"
-        logging.info(
-            "List of dataservers is %s" % json.dumps(dataserver_metadata, indent=4, separators=(',', ':')))
+        dataserver_metadata[id] = {"address": address, "heartbeat": 0, "status": "DEAD"}
     else:
-        logging.warning("Server wants to be registered, but we see it as alive")
+        if dataserver_metadata[id]["status"] == "DEAD":
+            logging.info("Server %s, addr %s is now registered as alive" % (id, address))
+            dataserver_metadata[id]["status"] = "ALIVE"
+            dataserver_metadata[id]["heartbeat"] = now()
+            logging.info(
+                "List of dataservers is %s" % json.dumps(dataserver_metadata, indent=4, separators=(',', ':')))
+        else:
+            logging.warning("Server wants to be registered, but we see it as alive")
 
 
 def _unregister(id, address):
@@ -214,7 +214,7 @@ class NameServer(rpyc.Service):
 
     def exposed_heartbeat(self, id):
         logging.debug("Received heartbeat from %s" % id)
-        dataserver_metadata[id]["heartbeat"] = int(time.time())
+        dataserver_metadata[id]["heartbeat"] = now()
         dataserver_metadata[id]["status"] = "ALIVE"
         pass
 
@@ -232,11 +232,7 @@ class NameServer(rpyc.Service):
             if address == dataserver_metadata[id]["address"]:
                 logging.error("Request to make ID for address %s, but one already exists %s" % (address, id))
                 return None
-
-        id = str(uuid.uuid4())
-        dataserver_metadata[id] = {"address": address, "heartbeat": 0, "status": "DEAD"}
-
-        return id
+        return str(uuid.uuid4())
 
     def exposed_create(self, file_name):
         return _create(file_name)

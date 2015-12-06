@@ -33,10 +33,10 @@ def mkdirp(path):
             raise exc
 
 
-def get_timestamp():
+def now():
     '''Returns the current timestamp.'''
 
-    return time.time()
+    return int(time.time())
 
 
 def cat_host(hostname, port):
