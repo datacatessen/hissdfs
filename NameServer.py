@@ -31,7 +31,8 @@ def start_name_service(config):
     try:
         while t.isAlive():
             _check_heartbeats()
-            t.join(1)
+            _check_replication()
+            t.join(5)
     except KeyboardInterrupt:
         pass
 
@@ -43,6 +44,39 @@ def _check_heartbeats():
             _unregister(servername.split(':')[0], int(servername.split(':')[1]))
 
 
+def _check_replication():
+    num_replicas = 3
+    for blocklist in namespace.values():
+        for (blk_id, hosts) in blocklist.items():
+            if len(hosts) != num_replicas:
+                logging.warning("Num replications for block %s is not %d, but %d" % (blk_id, num_replicas, len(hosts)))
+                _add_replicas(blk_id, hosts)
+
+
+def _add_replicas(blk_id, hosts, num_replicas=3):
+    if len(hosts) == 0:
+        logging.error("Unable to replicate %s because there are currently 0 replicas")
+        return
+
+    replicas_to_add = min(num_replicas - len(hosts), len(dataserver_meta) - len(hosts))
+
+    if replicas_to_add == 0:
+        logging.error("Unable to replicate %s because there is no host is available for replication" % blk_id)
+        return
+
+    logging.debug("Adding %d replicas for %s" % (replicas_to_add, blk_id))
+
+    src = random.sample(hosts, 1)[0]
+    new_hosts = list(hosts)
+
+    for i in range(0, replicas_to_add):
+        dst = _random_dataserver(exclude=new_hosts)
+        conn = connect(src)
+        conn.root.replicate(blk_id, dst)
+        logging.info("Replicating %s from %s to %s" % (blk_id, src, dst))
+        new_hosts.append(dst)
+
+
 ''' Utility Functions '''
 
 
@@ -50,8 +84,14 @@ def _random_id():
     return '_'.join(["blk", str(random.randint(0, sys.maxint))])
 
 
-def _random_dataserver():
-    return random.sample(dataserver_meta.keys(), 1)[0]
+def _random_dataserver(exclude=None):
+    if exclude is None:
+        return random.sample(dataserver_meta.keys(), 1)[0]
+    else:
+        server = random.sample(dataserver_meta.keys(), 1)[0]
+        while server in exclude:
+            server = random.sample(dataserver_meta.keys(), 1)[0]
+        return server
 
 
 ''' Data Server as Client '''
@@ -75,6 +115,11 @@ def _unregister(host, port):
         logging.info("Unregistered dataserver at %s:%s" % (host, port))
         del dataserver_meta[servername]
 
+    for blocklist in namespace.values():
+        for (blk_id, hosts) in blocklist.items():
+            assert isinstance(hosts, set)
+            hosts.remove(servername)
+
 
 ''' File System Commands '''
 
@@ -91,7 +136,7 @@ def _create(file_name):
         block_info['id'] = blk_id
         block_info['host'] = _random_dataserver()
         block_info['file'] = file_name
-        print block_info['host']
+
         ''' Update namespace block mapping to have this new block'''
         namespace[file_name] = collections.OrderedDict({blk_id: set()})
         block_to_file[blk_id] = file_name
@@ -166,7 +211,6 @@ class NameServer(rpyc.Service):
                 namespace[block_to_file[blk_id]][blk_id].add(servername)
             else:
                 logging.error("Unknown block %s in report from %s" % (blk_id, servername))
-        print namespace
 
     def exposed_create(self, file_name):
         return _create(file_name)

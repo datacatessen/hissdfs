@@ -75,10 +75,10 @@ def _write(blk_id, opath, payload):
         f.write(payload)
         f.close()
         blocks.add(blk_id)
-        logging.debug("Wrote %d bytes to block %s" % (len(payload), opath))
+        logging.info("Wrote %d bytes to block %s" % (len(payload), opath))
         return True
     else:
-        raise OSError.FileExistsError("Block %s has already been written" % blk_id)
+        raise Exception("Block %s has already been written" % blk_id)
 
 
 def _rm_blk(blk_id, opath):
@@ -88,7 +88,7 @@ def _rm_blk(blk_id, opath):
         logging.debug("Deleted block at %s" % opath)
         return True
     else:
-        raise OSError.FileExistsError("Block %s does not exist" % blk_id)
+        raise Exception("Block %s does not exist" % blk_id)
 
 
 class DataServer(rpyc.Service):
@@ -122,6 +122,15 @@ class DataServer(rpyc.Service):
     def exposed_rm_blk(self, blk_id):
         opath = path.join(self._data_dir, blk_id)
         return _rm_blk(blk_id, opath)
+
+    def exposed_replicate(self, blk_id, dst):
+        opath = path.join(self._data_dir, blk_id)
+        conn = connect(dst)
+
+        if conn.root.write(blk_id, open(opath).read()):
+            logging.info("Successfully replicated block %s to %s" % (blk_id, dst))
+        else:
+            logging.error("Failed to replicate block %s to %s" % (blk_id, dst))
 
     def on_connect(self):
         pass
