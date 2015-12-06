@@ -1,7 +1,14 @@
 import errno, logging, rpyc, time, os
+from rpyc.utils.server import ThreadedServer
 
 
-def _connect(hostname, port=None):
+def start_rpyc_server(service, port):
+    logging.debug("Started service")
+    ThreadedServer(service, port=port).start()
+    logging.debug("Service over")
+
+
+def connect(hostname, port=None):
     '''Connects to a rpyc slave. It can either take the form of _connect('1.2.3.4:1234') or _connect('1.2.3.4', 1234)'''
 
     if port is None:
@@ -16,7 +23,7 @@ def _connect(hostname, port=None):
         raise e
 
 
-def _mkdirp(path):
+def mkdirp(path):
     path = path.strip()
     if len(path) == 0:
         raise ValueError("I can't make a directory with no name")
@@ -30,7 +37,7 @@ def _mkdirp(path):
             raise exc
 
 
-def _get_timestamp():
+def get_timestamp():
     '''Returns the current timestamp.'''
 
     return time.time()

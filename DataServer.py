@@ -1,12 +1,59 @@
-#!/usr/bin/python
-
 # System imports
-import logging, os, rpyc
+import logging, os, threading, time
 from os import path
+from socket import gethostname, error as socket_error
+
+import rpyc
 # Local imports
-from Utils import _connect
+from Utils import connect, mkdirp, start_rpyc_server
 
 blocks = set()
+
+
+def start_data_service(config, port):
+    data_dir = path.join(path.abspath(config['dataserver.data.dir']), 'storage')
+
+    mkdirp(data_dir)
+
+    DataServer._hostname = gethostname()
+    DataServer._port = port
+    DataServer._data_dir = data_dir
+    DataServer._config = config
+
+    t = threading.Thread(target=start_rpyc_server, args=(DataServer, port))
+    t.daemon = True
+    t.start()
+
+    conn = None
+    while conn == None:
+        try:
+            conn = connect(gethostname(), port)
+            _register(config, DataServer._hostname, DataServer._port)
+        except socket_error:
+            time.sleep(3)
+            pass
+
+    try:
+        while t.isAlive():
+            conn.root.heartbeat()
+            t.join(3)
+    except KeyboardInterrupt:
+        logging.info("Caught KeyboardInterrupt, unregistering")
+        _unregister(config, DataServer._hostname, DataServer._port)
+
+
+def _register(config, host, port):
+    nameserver_host = config['nameserver.host']
+    nameserver_port = config['nameserver.port']
+    conn = connect(nameserver_host, nameserver_port)
+    conn.root.register(host, port)
+
+
+def _unregister(config, host, port):
+    nameserver_host = config['nameserver.host']
+    nameserver_port = config['nameserver.port']
+    conn = connect(nameserver_host, nameserver_port)
+    conn.root.unregister(host, port)
 
 
 def _has_blk(blk_id):
@@ -51,7 +98,7 @@ class DataServer(rpyc.Service):
 
     def __init__(self, *args):
         super(DataServer, self).__init__(args)
-        self._conn = _connect(self._config['nameserver.host'], self._config['nameserver.port'])
+        self._conn = connect(self._config['nameserver.host'], self._config['nameserver.port'])
 
     def exposed_heartbeat(self):
         self._conn.root.heartbeat(self._hostname, self._port)

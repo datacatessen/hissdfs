@@ -3,7 +3,7 @@
 import random
 import sys
 
-from Utils import _connect
+from Utils import connect
 
 if __name__ == "__main__":
     if len(sys.argv) <= 1:
@@ -13,7 +13,7 @@ if __name__ == "__main__":
     exit_code = 0
     host = sys.argv[1]
     cmd = sys.argv[2]
-    conn = _connect(host)
+    conn = connect(host)
 
     if cmd == "exists":
         if not conn.root.exists(sys.argv[3]):
@@ -26,7 +26,7 @@ if __name__ == "__main__":
                 block_info = conn.root.fetch_metadata(file)
                 for blk_id in block_info:
                     host = random.choice(block_info[blk_id])
-                    data_conn = _connect(host)
+                    data_conn = connect(host)
                     print data_conn.root.read(blk_id)
             else:
                 print "file %s does not exist" % file
@@ -47,7 +47,7 @@ if __name__ == "__main__":
             else:
                 print "putting file %s at %s" % (src, dst)
                 block_info = conn.root.create(dst)
-                data_conn = _connect(block_info['host'])
+                data_conn = connect(block_info['host'])
 
                 if not data_conn.root.write(block_info['id'], open(src).read()):
                     print "failed to write %s to %s, removing" % (src, dst)

@@ -1,8 +1,9 @@
-#!/usr/bin/python
-
 # System imports
-import logging, random, rpyc, sys, time
-from Utils import _connect
+import logging, random, rpyc, sys, threading, time
+from socket import gethostname
+
+# Local imports
+from Utils import connect, start_rpyc_server
 
 '''
 The namespace maintains a multi-map of filename -> block id -> { hostnames }
@@ -13,6 +14,22 @@ namespace = dict()
 This is a set of dataservers currently connected to the NameServer
 '''
 dataserver_meta = {}
+
+
+def start_name_service(config):
+    port = int(config['nameserver.port'])
+    NameServer._hostname = gethostname()
+    NameServer._port = port
+
+    t = threading.Thread(target=start_rpyc_server, args=(NameServer, port))
+    t.daemon = True
+    t.start()
+    try:
+        while t.isAlive():
+            _check_heartbeats()
+            t.join(1)
+    except KeyboardInterrupt:
+        pass
 
 
 def _check_heartbeats():
@@ -79,7 +96,7 @@ def _rm(file_name):
         file_blocks = namespace[file_name]
         for blk_id in file_blocks:
             for host in file_blocks[blk_id]:
-                ds_conn = _connect(host)
+                ds_conn = connect(host)
                 ds_conn.root.rm_blk(blk_id)
         del namespace[file_name]
         return True
