@@ -65,7 +65,7 @@ def _check_replication():
 
 def _add_replicas(blk_id, ids, num_replicas=3):
     if len(ids) == 0:
-        logging.error("Unable to replicate %s because there are currently 0 replicas")
+        logging.error("Unable to replicate %s because there are currently 0 replicas" % blk_id)
         return
 
     replicas_to_add = min(num_replicas - len(ids), len(dataserver_metadata) - len(ids))
@@ -129,7 +129,8 @@ def _unregister(id, address):
         for blocklist in namespace.values():
             for (blk_id, hosts) in blocklist.items():
                 assert isinstance(hosts, set)
-                hosts.remove(id)
+                if id in hosts:
+                    hosts.remove(id)
 
         logging.info("Server %s, addr %s is now registered as dead and all blocks invalidated" % (id, address))
         logging.info(
