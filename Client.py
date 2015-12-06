@@ -25,7 +25,7 @@ if __name__ == "__main__":
             if conn.root.exists(file):
                 block_info = conn.root.fetch_metadata(file)
                 for blk_id in block_info:
-                    host = random.choice(block_info[blk_id])
+                    host = random.sample(block_info[blk_id], 1)[0]
                     data_conn = connect(host)
                     print data_conn.root.read(blk_id)
             else:

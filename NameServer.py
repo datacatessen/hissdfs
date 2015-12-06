@@ -1,19 +1,23 @@
 # System imports
-import logging, random, rpyc, sys, threading, time
+import collections, logging, random, rpyc, sys, threading, time
 from socket import gethostname
-
 # Local imports
 from Utils import connect, start_rpyc_server
 
 '''
-The namespace maintains a multi-map of filename -> block id -> { hostnames }
+The namespace maintains a multi-map of filename -> { block id : [ hostnames ] }, 
+where the map of block id to hostname list is an OrderedDict
 '''
 namespace = dict()
+
+block_to_file = dict()
 
 '''
 This is a set of dataservers currently connected to the NameServer
 '''
 dataserver_meta = {}
+
+''' Threaded operations '''
 
 
 def start_name_service(config):
@@ -39,12 +43,40 @@ def _check_heartbeats():
             _unregister(servername.split(':')[0], int(servername.split(':')[1]))
 
 
+''' Utility Functions '''
+
+
 def _random_id():
     return '_'.join(["blk", str(random.randint(0, sys.maxint))])
 
 
 def _random_dataserver():
-    return random.choice(dataserver_meta.keys())
+    return random.sample(dataserver_meta.keys(), 1)[0]
+
+
+''' Data Server as Client '''
+
+
+def _register(host, port):
+    servername = "%s:%d" % (host, port)
+    if servername not in dataserver_meta:
+        dataserver_meta[servername] = time.time()
+        logging.info("Registered dataserver at %s:%s" % (host, port))
+        logging.info("List of dataservers is %s" % dataserver_meta.keys())
+    else:
+        logging.warning("Server has already been registered with the service")
+
+
+def _unregister(host, port):
+    servername = "%s:%d" % (host, port)
+    if servername not in dataserver_meta:
+        logging.warning("Call to unregister %s:%s, but no server exists" % (host, port))
+    else:
+        logging.info("Unregistered dataserver at %s:%s" % (host, port))
+        del dataserver_meta[servername]
+
+
+''' File System Commands '''
 
 
 def _create(file_name):
@@ -54,18 +86,20 @@ def _create(file_name):
 
         namespace[file_name] = dict()
 
+        blk_id = _random_id()
         block_info = dict()
-        block_info['id'] = _random_id()
+        block_info['id'] = blk_id
         block_info['host'] = _random_dataserver()
         block_info['file'] = file_name
-
+        print block_info['host']
         ''' Update namespace block mapping to have this new block'''
-        namespace[file_name] = {block_info['id']: [block_info['host']]}
+        namespace[file_name] = collections.OrderedDict({blk_id: set()})
+        block_to_file[blk_id] = file_name
 
         logging.debug("returning block info %s" % block_info)
         return block_info
     else:
-        raise OSError.FileExistsError("File %s already exists" % file_name)
+        raise Exception("File %s already exists" % file_name)
 
 
 def _fetch_metadata(file_name):
@@ -87,7 +121,7 @@ def _touch(file_name):
         namespace[file_name] = list()
         return True
     else:
-        raise OSError.FileExistsError("File %s already exists" % file_name)
+        raise Exception("File %s already exists" % file_name)
 
 
 def _rm(file_name):
@@ -113,25 +147,6 @@ def _ls():
     return files
 
 
-def _register(host, port):
-    servername = "%s:%d" % (host, port)
-    if not servername in dataserver_meta:
-        dataserver_meta[servername] = time.time()
-        logging.info("Registered dataserver at %s:%s" % (host, port))
-        logging.info("List of dataservers is %s" % dataserver_meta.keys())
-    else:
-        logging.warning("Server has already been registered with the service")
-
-
-def _unregister(host, port):
-    servername = "%s:%d" % (host, port)
-    if not servername in dataserver_meta:
-        logging.warning("Call to unregister %s:%s, but no server exists" % (host, port))
-    else:
-        logging.info("Unregistered dataserver at %s:%s" % (host, port))
-        del dataserver_meta[servername]
-
-
 class NameServer(rpyc.Service):
     def exposed_ping(self):
         return 'pong'
@@ -141,6 +156,17 @@ class NameServer(rpyc.Service):
         logging.debug("Received heartbeat from %s" % servername)
         dataserver_meta[servername] = time.time()
         pass
+
+    def exposed_block_report(self, host, port, report):
+        servername = "%s:%d" % (host, port)
+        logging.debug("Received block report from %s, %s" % (servername, report))
+
+        for blk_id in report:
+            if blk_id in block_to_file:
+                namespace[block_to_file[blk_id]][blk_id].add(servername)
+            else:
+                logging.error("Unknown block %s in report from %s" % (blk_id, servername))
+        print namespace
 
     def exposed_create(self, file_name):
         return _create(file_name)

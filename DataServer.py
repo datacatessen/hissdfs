@@ -35,8 +35,10 @@ def start_data_service(config, port):
 
     try:
         while t.isAlive():
-            conn.root.heartbeat()
+            conn.root.send_heartbeat()
+            conn.root.send_block_report()
             t.join(3)
+
     except KeyboardInterrupt:
         logging.info("Caught KeyboardInterrupt, unregistering")
         _unregister(config, DataServer._hostname, DataServer._port)
@@ -100,8 +102,11 @@ class DataServer(rpyc.Service):
         super(DataServer, self).__init__(args)
         self._conn = connect(self._config['nameserver.host'], self._config['nameserver.port'])
 
-    def exposed_heartbeat(self):
+    def exposed_send_heartbeat(self):
         self._conn.root.heartbeat(self._hostname, self._port)
+
+    def exposed_send_block_report(self):
+        self._conn.root.block_report(self._hostname, self._port, blocks)
 
     def exposed_has_blk(self, blk_id):
         return _has_blk(blk_id)
