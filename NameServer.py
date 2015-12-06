@@ -91,30 +91,31 @@ def _ls():
 
 def _register(host, port):
     servername = "%s:%d" % (host, port)
-    if servername in dataservers:
-        logging.error("Server has already been registered with the service")
-        return False
-    else:
+    if not servername in dataservers:
         dataservers.append(servername)
         logging.info("Registered dataserver at %s:%s" % (host, port))
         logging.info("List of dataservers is %s" % dataservers)
-        return True
+    else:
+        logging.warning("Server has already been registered with the service")
 
 
 def _unregister(host, port):
     servername = "%s:%d" % (host, port)
     if not servername in dataservers:
         logging.warning("Call to unregister %s:%s, but no server exists" % (host, port))
-        return False
     else:
         logging.info("Unregistered dataserver at %s:%s" % (host, port))
         dataservers.remove(servername)
-        return True
 
 
 class NameServer(rpyc.Service):
     def exposed_ping(self):
         return 'pong'
+
+    def exposed_heartbeat(self, host, port):
+        servername = "%s:%d" % (host, port)
+        logging.debug("Received heartbeat from %s" % servername)
+        pass
 
     def exposed_create(self, file_name):
         return _create(file_name)
@@ -135,10 +136,10 @@ class NameServer(rpyc.Service):
         return _ls()
 
     def exposed_register(self, host, port):
-        return _register(host, port)
+        _register(host, port)
 
     def exposed_unregister(self, host, port):
-        return _unregister(host, port)
+        _unregister(host, port)
 
     def on_connect(self):
         pass

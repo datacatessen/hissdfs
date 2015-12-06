@@ -1,10 +1,12 @@
 #!/usr/bin/python
 
 # System imports
-import logging, json, sys
+import logging, json, sys, threading, time
 from os import path
 from socket import gethostname
+from socket import error as socket_error
 from rpyc.utils.server import ThreadedServer
+from rpyc.core.protocol import DEFAULT_CONFIG
 # Local imports
 from Utils import _connect
 from Utils import _mkdirp
@@ -12,7 +14,6 @@ from DataServer import DataServer
 from NameServer import NameServer
 
 required_params = ['nameserver.host', 'nameserver.port', 'dataserver.data.dir']
-
 
 def _init_logging(config):
     root = logging.getLogger()
@@ -33,23 +34,20 @@ def _register(config, host, port):
     nameserver_host = config['nameserver.host']
     nameserver_port = config['nameserver.port']
     conn = _connect(nameserver_host, nameserver_port)
-    if conn.root.register(host, port):
-        return True
-    else:
-        raise Exception(
-            "Failed to register service %s:%d to nameserver at %s:%d" % (host, port, nameserver_host, nameserver_port))
+    conn.root.register(host, port)
 
 
 def _unregister(config, host, port):
     nameserver_host = config['nameserver.host']
     nameserver_port = config['nameserver.port']
     conn = _connect(nameserver_host, nameserver_port)
-    if conn.root.unregister(host, port):
-        return True
-    else:
-        raise Exception(
-            "Failed to unregister service %s:%d to nameserver at %s:%d" % (
-                host, port, nameserver_host, nameserver_port))
+    conn.root.unregister(host, port)
+
+
+def _start_server(service, port):
+    logging.debug("Started service")
+    ThreadedServer(service, port=port).start()
+    logging.debug("Service over")
 
 
 def start_name_service(config):
@@ -57,29 +55,44 @@ def start_name_service(config):
     NameServer._hostname = gethostname()
     NameServer._port = port
 
-    s = ThreadedServer(NameServer, port=port)
-    s.start()
+    t = threading.Thread(target=_start_server, args=(NameServer, port))
+    t.daemon = True
+    t.start()
+    try:
+        while t.isAlive(): t.join(1)
+    except KeyboardInterrupt:
+        pass
 
 
 def start_data_service(config, port):
-    data_dir = path.abspath(config['dataserver.data.dir'])
+    data_dir = path.join(path.abspath(config['dataserver.data.dir']), 'storage')
 
     _mkdirp(data_dir)
 
     DataServer._hostname = gethostname()
     DataServer._port = port
     DataServer._data_dir = data_dir
+    DataServer._config = config
 
-    _mkdirp(path.join(data_dir, 'storage'))
+    t = threading.Thread(target=_start_server, args=(DataServer, port))
+    t.daemon = True
+    t.start()
 
-    retval = _register(config, DataServer._hostname, DataServer._port)
-    print retval
-    if not retval:
-        print "Failed to register service, check name server logs"
-        sys.exit(1)
-    else:
-        s = ThreadedServer(DataServer, port=port)
-        s.start()
+    conn = None
+    while conn == None:
+        try:
+            conn = _connect(gethostname(), port)
+            _register(config, DataServer._hostname, DataServer._port)
+        except socket_error:
+            time.sleep(3)
+            pass
+
+    try:
+        while t.isAlive():
+            conn.root.heartbeat()
+            t.join(3)
+    except KeyboardInterrupt:
+        logging.info("Caught KeyboardInterrupt, unregistering")
         _unregister(config, DataServer._hostname, DataServer._port)
 
 

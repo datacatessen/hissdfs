@@ -3,8 +3,8 @@
 # System imports
 import logging, os, rpyc
 from os import path
-
 # Local imports
+from Utils import _connect
 
 blocks = set()
 
@@ -43,19 +43,32 @@ def _rm_blk(blk_id, opath):
 
 
 class DataServer(rpyc.Service):
+    _conn = None
+    _data_dir = None
+    _hostname = None
+    _port = None
+    _config = None
+
+    def __init__(self, *args):
+        super(DataServer, self).__init__(args)
+        self._conn = _connect(self._config['nameserver.host'], self._config['nameserver.port'])
+
+    def exposed_heartbeat(self):
+        self._conn.root.heartbeat(self._hostname, self._port)
+
     def exposed_has_blk(self, blk_id):
         return _has_blk(blk_id)
 
     def exposed_write(self, blk_id, payload):
-        opath = path.join(self._data_dir, 'storage', blk_id)
+        opath = path.join(self._data_dir, blk_id)
         return _write(blk_id, opath, payload)
 
     def exposed_read(self, blk_id):
-        opath = path.join(self._data_dir, 'storage', blk_id)
+        opath = path.join(self._data_dir, blk_id)
         return _read(blk_id, opath)
 
     def exposed_rm_blk(self, blk_id):
-        opath = path.join(self._data_dir, 'storage', blk_id)
+        opath = path.join(self._data_dir, blk_id)
         return _rm_blk(blk_id, opath)
 
     def on_connect(self):
