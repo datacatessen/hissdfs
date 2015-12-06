@@ -25,9 +25,13 @@ if __name__ == "__main__":
             if conn.root.exists(file):
                 block_info = conn.root.fetch_metadata(file)
                 for blk_id in block_info:
-                    host = random.sample(block_info[blk_id], 1)[0]
-                    data_conn = connect(host)
-                    print data_conn.root.read(blk_id)
+                    assert isinstance(block_info, dict)
+                    if len(block_info[blk_id]) > 0:
+                        host = random.sample(block_info[blk_id], 1)[0]
+                        data_conn = connect(host)
+                        print data_conn.root.read(blk_id)
+                    else:
+                        print "no replicas for %s" % blk_id
             else:
                 print "file %s does not exist" % file
                 exit_code = 1
