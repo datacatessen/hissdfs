@@ -8,7 +8,7 @@ from DataServer import start_data_service
 from NameServer import start_name_service
 from Utils import connect
 
-required_params = ['nameserver.host', 'nameserver.port', 'dataserver.data.dir', 'log.level']
+required_params = ['nameserver.address', 'dataserver.root.dir', 'log.level']
 
 
 def _init_logging(config):

@@ -49,11 +49,10 @@ if __name__ == "__main__":
                 print "file %s already exists" % dst
                 exit_code = 1
             else:
-                print "putting file %s at %s" % (src, dst)
                 block_info = conn.root.create(dst)
-                data_conn = connect(block_info['host'])
+                data_conn = connect(block_info["address"])
 
-                if not data_conn.root.write(block_info['id'], open(src).read()):
+                if not data_conn.root.write(block_info["id"], open(src).read()):
                     print "failed to write %s to %s, removing" % (src, dst)
                     conn.root.rm(dst)
                     exit_code = 1

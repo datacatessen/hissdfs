@@ -2,21 +2,35 @@
 import logging, os, threading, time, uuid
 from os import path
 from socket import gethostname, error as socket_error
-
 import rpyc
 # Local imports
-from Utils import connect, mkdirp, start_rpyc_server
+from Utils import cat_host, connect, mkdirp, start_rpyc_server
 
 blocks = set()
 
 
 def start_data_service(config, port):
-    data_dir = path.join(path.abspath(config['dataserver.data.dir']), 'storage', str(uuid.uuid4()))
+    data_dir = path.join(path.abspath(config['dataserver.root.dir']), 'storage')
+    id_file = path.join(path.abspath(config['dataserver.root.dir']), 'id')
 
     mkdirp(data_dir)
 
-    DataServer._hostname = gethostname()
-    DataServer._port = port
+    nameserver_address = config['nameserver.address']
+    dataserver_address = cat_host(gethostname(), port)
+
+    id = None
+    if os.path.exists(id_file):
+        id = open(id_file, 'r').read()
+        logging.info("ID is %s" % id)
+    else:
+        nameserver_conn = connect(nameserver_address)
+        id = nameserver_conn.root.make_id(dataserver_address)
+        f = open(id_file, 'w')
+        f.write(id)
+        f.close()
+        logging.info("Created a new ID, %s" % id)
+
+    DataServer._id = id
     DataServer._data_dir = data_dir
     DataServer._config = config
 
@@ -24,38 +38,26 @@ def start_data_service(config, port):
     t.daemon = True
     t.start()
 
-    conn = None
-    while conn == None:
+    dataserver_conn = None
+    while dataserver_conn == None:
         try:
-            conn = connect(gethostname(), port)
-            _register(config, DataServer._hostname, DataServer._port)
+            dataserver_conn = connect(dataserver_address)
+            nameserver_conn = connect(nameserver_address)
+            nameserver_conn.root.register(id, dataserver_address)
         except socket_error:
             time.sleep(3)
             pass
 
     try:
         while t.isAlive():
-            conn.root.send_heartbeat()
-            conn.root.send_block_report()
+            dataserver_conn.root.send_heartbeat()
+            dataserver_conn.root.send_block_report()
             t.join(3)
 
     except KeyboardInterrupt:
         logging.info("Caught KeyboardInterrupt, unregistering")
-        _unregister(config, DataServer._hostname, DataServer._port)
-
-
-def _register(config, host, port):
-    nameserver_host = config['nameserver.host']
-    nameserver_port = config['nameserver.port']
-    conn = connect(nameserver_host, nameserver_port)
-    conn.root.register(host, port)
-
-
-def _unregister(config, host, port):
-    nameserver_host = config['nameserver.host']
-    nameserver_port = config['nameserver.port']
-    conn = connect(nameserver_host, nameserver_port)
-    conn.root.unregister(host, port)
+        nameserver_conn = connect(nameserver_address)
+        nameserver_conn.root.unregister(id, dataserver_address)
 
 
 def _has_blk(blk_id):
@@ -92,21 +94,20 @@ def _rm_blk(blk_id, opath):
 
 
 class DataServer(rpyc.Service):
+    _config = None
     _conn = None
     _data_dir = None
-    _hostname = None
-    _port = None
-    _config = None
+    _id = None
 
     def __init__(self, *args):
         super(DataServer, self).__init__(args)
-        self._conn = connect(self._config['nameserver.host'], self._config['nameserver.port'])
+        self._conn = connect(self._config['nameserver.address'])
 
     def exposed_send_heartbeat(self):
-        self._conn.root.heartbeat(self._hostname, self._port)
+        self._conn.root.heartbeat(self._id)
 
     def exposed_send_block_report(self):
-        self._conn.root.block_report(self._hostname, self._port, blocks)
+        self._conn.root.block_report(self._id, blocks)
 
     def exposed_has_blk(self, blk_id):
         return _has_blk(blk_id)

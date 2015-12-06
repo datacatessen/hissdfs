@@ -1,6 +1,0 @@
-{
-  "nameserver.host": "localhost",
-  "nameserver.port": 40404,
-  "dataserver.data.dir": "/tmp/dcd",
-  "log.level": "INFO"
-}
