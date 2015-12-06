@@ -1,5 +1,5 @@
 # System imports
-import logging, os, threading, time, uuid
+import logging, os, re, threading, time
 from os import path
 from socket import gethostname, error as socket_error
 import rpyc
@@ -22,6 +22,8 @@ def start_data_service(config, port):
     if os.path.exists(id_file):
         id = open(id_file, 'r').read()
         logging.info("ID is %s" % id)
+
+        _refresh_blocks(data_dir)
     else:
         nameserver_conn = connect(nameserver_address)
         id = nameserver_conn.root.make_id(dataserver_address)
@@ -58,6 +60,14 @@ def start_data_service(config, port):
         logging.info("Caught KeyboardInterrupt, unregistering")
         nameserver_conn = connect(nameserver_address)
         nameserver_conn.root.unregister(id, dataserver_address)
+
+
+def _refresh_blocks(path):
+    for file in os.listdir(path):
+        if re.match(r"^blk_[0-9]+$", file):
+            blocks.add(file)
+        else:
+            logging.warn("Non-block file in storage directory, %s" % file)
 
 
 def _has_blk(blk_id):
