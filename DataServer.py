@@ -1,5 +1,5 @@
 # System imports
-import logging, os, threading, time
+import logging, os, threading, time, uuid
 from os import path
 from socket import gethostname, error as socket_error
 
@@ -11,7 +11,7 @@ blocks = set()
 
 
 def start_data_service(config, port):
-    data_dir = path.join(path.abspath(config['dataserver.data.dir']), 'storage')
+    data_dir = path.join(path.abspath(config['dataserver.data.dir']), 'storage', str(uuid.uuid4()))
 
     mkdirp(data_dir)
 
