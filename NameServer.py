@@ -1,9 +1,10 @@
 # System imports
-import json, logging, random, rpyc, sys, threading, uuid
+import copy, json, logging, pickle, random, rpyc, sys, threading, uuid
 from collections import OrderedDict
+from os import path
 from socket import gethostname
 # Local imports
-from Utils import connect, now, split_hostport, start_rpyc_server
+from Utils import connect, mkdirp, now, split_hostport, start_rpyc_server
 
 '''
 The namespace maintains a multi-map of filename -> { block id : set(server_ids) },
@@ -23,7 +24,9 @@ dataserver_metadata = {}
 
 
 def start_name_service(config):
-    hostname, port = split_hostport(config['nameserver.address'])
+    global CONF
+    CONF = config
+    hostname, port = split_hostport(CONF['nameserver.address'])
 
     if hostname != gethostname():
         logging.error(
@@ -31,6 +34,8 @@ def start_name_service(config):
 
     NameServer._hostname = hostname
     NameServer._port = port
+
+    _load_namespace()
 
     t = threading.Thread(target=start_rpyc_server, args=(NameServer, port))
     t.daemon = True
@@ -41,6 +46,7 @@ def start_name_service(config):
             _check_replication()
             t.join(5)
     except KeyboardInterrupt:
+        _save_namespace()
         pass
 
 
@@ -85,6 +91,34 @@ def _add_replicas(blk_id, ids, num_replicas=3):
         conn.root.replicate(blk_id, metadata["address"])
         logging.info("Replicating %s from %s to %s" % (blk_id, src, metadata["address"]))
         new_ids.append(id)
+
+
+def _save_namespace():
+    mkdirp(CONF["nameserver.root.dir"])
+    f = open(path.join(CONF["nameserver.root.dir"], "fsimage"), 'w')
+
+    ns_copy = copy.deepcopy(namespace)
+
+    # purge the block mappings
+    for blockmapping in ns_copy.values():
+        for set_hosts in blockmapping.values():
+            set_hosts.clear()
+    
+    pickle.dump(ns_copy, f)
+    pickle.dump(block_to_file, f)
+    f.close()
+    logging.info("Saved namespace metadata to %s" % f.name)
+
+
+def _load_namespace():
+    file = path.join(CONF["nameserver.root.dir"], "fsimage")
+    if path.exists(file) and path.getsize(file) != 0:
+        f = open(file, 'r')
+        namespace.update(pickle.load(f))
+        block_to_file.update(pickle.load(f))
+        logging.info("Loaded namespace from %s" % file)
+    else:
+        logging.info("No namespace to load")
 
 
 ''' Utility Functions '''
@@ -165,7 +199,7 @@ def _create(file_name):
 
 def _fetch_metadata(file_name):
     if _exists(file_name):
-        logging.debug("fetch_metdata %s" % file_name)
+        logging.debug("fetch_metadata %s" % file_name)
         return namespace[file_name]
     else:
         raise Exception("File %s does not exist" % file_name)
@@ -221,11 +255,18 @@ class NameServer(rpyc.Service):
     def exposed_block_report(self, id, report):
         logging.debug("Received block report from %s, %s" % (id, report))
 
+        changed = False
         for blk_id in report:
             if blk_id in block_to_file:
-                namespace[block_to_file[blk_id]][blk_id].add(id)
+                dataserver_set = namespace[block_to_file[blk_id]][blk_id]
+                if id not in dataserver_set:
+                    dataserver_set.add(id)
+                    changed = True
             else:
                 logging.error("Unknown block %s in report from %s" % (blk_id, id))
+
+        if changed:
+            _save_namespace()
 
     def exposed_make_id(self, address):
         for id in dataserver_metadata:
