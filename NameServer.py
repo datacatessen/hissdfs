@@ -103,7 +103,7 @@ def _save_namespace():
     for blockmapping in ns_copy.values():
         for set_hosts in blockmapping.values():
             set_hosts.clear()
-    
+
     pickle.dump(ns_copy, f)
     pickle.dump(block_to_file, f)
     f.close()
@@ -133,6 +133,13 @@ def _random_dataserver(exclude=list()):
     while id in exclude or dataserver_metadata[id]["status"] == "DEAD":
         id = random.sample(dataserver_metadata.keys(), 1)[0]
     return (id, dataserver_metadata[id])
+
+
+def _get_address_from_id(host_id):
+    if host_id in dataserver_metadata:
+        return dataserver_metadata[host_id]["address"]
+    else:
+        return None
 
 
 ''' Data Server as Client '''
@@ -200,7 +207,15 @@ def _create(file_name):
 def _fetch_metadata(file_name):
     if _exists(file_name):
         logging.debug("fetch_metadata %s" % file_name)
-        return namespace[file_name]
+
+        retval = OrderedDict()
+        for (blk_id, hosts) in namespace[file_name].items():
+            addresses = set()
+            for host_id in hosts:
+                addresses.add(_get_address_from_id(host_id))
+
+            retval[blk_id] = addresses
+        return retval
     else:
         raise Exception("File %s does not exist" % file_name)
 
