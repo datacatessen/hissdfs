@@ -15,7 +15,6 @@ Code beautification is TBD
     * Stores blocks in a single storage directory along with ID
     * Sends Heartbeats and Block Reports to NameServer
     * Manages client I/O for reading and writing blocks of data
-        * Currently, one file = one block
     * Registers/unregisters with NameServer on startup/shutdown
     * Includes all blocks in storage directory in initial Block Report (restart from failure scenario)
 
