@@ -1,0 +1,6 @@
+{
+  "nameserver.address": "localhost:40404",
+  "nameserver.root.dir": "/tmp/name",
+  "dataserver.root.dir": "/tmp/data2",
+  "log.level": "DEBUG"
+}

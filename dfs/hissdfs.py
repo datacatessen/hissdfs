@@ -1,14 +1,13 @@
 #!/usr/bin/python
+# hissdfs.py
 
-# System imports
 import json, logging, sys
 from os import path
-# Local imports
-from DataServer import start_data_service
+from Client import run_client
 from NameServer import start_name_service
-from Utils import connect
+from DataServer import start_data_service
 
-required_params = ['nameserver.address', 'dataserver.root.dir', 'log.level']
+required_params = ['dataserver.root.dir', 'nameserver.address', 'nameserver.root.dir', 'log.level']
 
 
 def _init_logging(config):
@@ -27,12 +26,11 @@ def _validate_config(config):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) <= 1:
-        print "usage: python dcd.py <config> <service> [options]"
+    if len(sys.argv) < 3:
+        print "usage: python hissdfs.py <config> <service> [options]"
         sys.exit(1)
 
     config_file = sys.argv[1]
-    service = sys.argv[2]
 
     if not path.exists(config_file):
         logging.error("config file %s not found" % config_file)
@@ -42,13 +40,16 @@ if __name__ == "__main__":
     _validate_config(config)
     _init_logging(config)
 
+    service = sys.argv[2]
+
     if service == "nameserver":
         start_name_service(config)
     elif service == "dataserver":
-        if len(sys.argv) != 4:
-            print "dataserver service options: port"
-            sys.exit(1)
-        else:
+        if len(sys.argv) == 4:
             start_data_service(config, int(sys.argv[3]))
+        else:
+            print "dataserver service requires an additional parameter, <port>"
+    elif service == "dfs":
+        run_client(config, sys.argv[3:])
     else:
         logging.error("Unknown service %s" % service)

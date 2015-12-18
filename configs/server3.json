@@ -1,5 +1,0 @@
-{
-  "nameserver.address": "linuxvm.home:40404",
-  "dataserver.root.dir": "/tmp/data3",
-  "log.level": "INFO"
-}
